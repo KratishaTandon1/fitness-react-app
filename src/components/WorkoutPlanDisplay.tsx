@@ -13,6 +13,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import type { WorkoutPlan } from '../types';
 import { generateImage } from '../lib/api';
+import ImageModal from './ImageModal';
 
 interface WorkoutPlanDisplayProps {
   workoutPlan: WorkoutPlan;
@@ -22,6 +23,7 @@ const WorkoutPlanDisplay: React.FC<WorkoutPlanDisplayProps> = ({ workoutPlan }) 
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set([workoutPlan.workouts[0]?.day]));
   const [exerciseImages, setExerciseImages] = useState<Record<string, string>>({});
   const [loadingImages, setLoadingImages] = useState<Record<string, boolean>>({});
+  const [modalImage, setModalImage] = useState<{ src: string; alt: string } | null>(null);
 
   // Auto-generate images for all exercises when component mounts
   useEffect(() => {
@@ -75,6 +77,13 @@ const WorkoutPlanDisplay: React.FC<WorkoutPlanDisplayProps> = ({ workoutPlan }) 
 
   const getImageKey = (exerciseName: string) => exerciseName.toLowerCase().replace(/\s+/g, '-');
 
+  const handleImageClick = (imageSrc: string, imageAlt: string) => {
+    setModalImage({ src: imageSrc, alt: imageAlt });
+  };
+
+  const closeModal = () => {
+    setModalImage(null);
+  };
   return (
     <div className="space-y-6">
       {/* Plan Overview */}
@@ -250,7 +259,8 @@ const WorkoutPlanDisplay: React.FC<WorkoutPlanDisplayProps> = ({ workoutPlan }) 
                                     <img
                                       src={exerciseImages[getImageKey(exercise.name)]}
                                       alt={exercise.name}
-                                      className="w-20 h-20 object-cover rounded-md border"
+                                      className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:scale-105 transition-transform duration-200 hover:shadow-lg"
+                                      onClick={() => handleImageClick(exerciseImages[getImageKey(exercise.name)], exercise.name)}
                                       onError={(e) => {
                                         // If image fails to load, hide it
                                         const target = e.target as HTMLImageElement;
@@ -293,6 +303,14 @@ const WorkoutPlanDisplay: React.FC<WorkoutPlanDisplayProps> = ({ workoutPlan }) 
           </motion.div>
         ))}
       </div>
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={!!modalImage}
+        onClose={closeModal}
+        imageSrc={modalImage?.src || ''}
+        imageAlt={modalImage?.alt || ''}
+      />
     </div>
   );
 };

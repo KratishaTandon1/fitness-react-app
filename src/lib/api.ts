@@ -27,57 +27,118 @@ export const generateFitnessPlan = async (userDetails: UserDetails): Promise<AIR
   try {
     // Check for valid OpenAI API key (not placeholder)
     if (OPENAI_API_KEY && OPENAI_API_KEY !== 'your_openai_api_key_here') {
+      console.log('Generating plan with OpenAI GPT-4o...');
       return await generateWithOpenAI(prompt);
     } 
     // Fall back to Gemini if available
     else if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here' && GEMINI_API_KEY !== 'your_new_gemini_api_key_here') {
+      console.log('Generating plan with Google Gemini...');
       return await generateWithGemini(prompt);
     } 
-    // If no API keys available, return a demo response
+    // If no API keys available, return enhanced demo response
     else {
-      return generateDemoResponse(userDetails);
+      console.log('No API keys configured, using enhanced demo response...');
+      return generateEnhancedDemoResponse(userDetails);
     }
-    } catch {
-      // If OpenAI fails, try Gemini as fallback
+  } catch (error) {
+    console.error('Primary AI service failed:', error);
+    
+    // If OpenAI fails, try Gemini as fallback
     if (OPENAI_API_KEY && GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here' && GEMINI_API_KEY !== 'your_new_gemini_api_key_here') {
       try {
+        console.log('Trying Gemini as fallback...');
         return await generateWithGemini(prompt);
       } catch (geminiError) {
         console.error('Gemini fallback also failed:', geminiError);
       }
     }
     
-    // Final fallback to demo response
-    return generateDemoResponse(userDetails);
+    // Final fallback to enhanced demo response
+    console.log('All AI services failed, using enhanced demo response...');
+    return generateEnhancedDemoResponse(userDetails);
   }
 };
 
 const createFitnessPlanPrompt = (userDetails: UserDetails): string => {
-  const { name, age, gender, height, weight, fitnessGoal, fitnessLevel, workoutLocation, dietaryPreference, medicalHistory, stressLevel } = userDetails;
+  const { name, age, gender, height, weight, fitnessGoal, fitnessLevel, workoutLocation, dietaryPreference, medicalHistory, stressLevel, planDays } = userDetails;
   
-  return `Generate a comprehensive fitness plan for ${name}:
+  // Calculate BMI and basic metabolic info
+  const heightM = height / 100;
+  const bmi = weight / (heightM * heightM);
+  const bmr = gender === 'male' 
+    ? 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)
+    : 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age);
+  
+  const activityMultiplier = fitnessLevel === 'beginner' ? 1.2 : fitnessLevel === 'intermediate' ? 1.375 : 1.55;
+  const tdee = Math.round(bmr * activityMultiplier);
+  
+  const targetCalories = fitnessGoal === 'weight_loss' ? tdee - 500 : 
+                        fitnessGoal === 'muscle_gain' ? tdee + 300 :
+                        tdee;
 
-Personal Details:
-- Age: ${age} years
+  return `You are an expert fitness coach and nutritionist. Generate a comprehensive, science-based fitness plan for ${name}.
+
+**PERSONAL PROFILE:**
+- Name: ${name}
+- Age: ${age} years (${age < 25 ? 'Young adult' : age < 40 ? 'Adult' : age < 55 ? 'Middle-aged' : 'Mature adult'})
 - Gender: ${gender}
-- Height: ${height} cm
-- Weight: ${weight} kg
-- Fitness Goal: ${fitnessGoal.replace('_', ' ')}
-- Fitness Level: ${fitnessLevel}
-- Workout Location: ${workoutLocation}
+- Height: ${height} cm, Weight: ${weight} kg (BMI: ${bmi.toFixed(1)})
+- Current Fitness Level: ${fitnessLevel}
+- Primary Goal: ${fitnessGoal.replace('_', ' ')}
+- Workout Environment: ${workoutLocation}
 - Dietary Preference: ${dietaryPreference.replace('_', ' ')}
-${medicalHistory ? `- Medical History: ${medicalHistory}` : ''}
-${stressLevel ? `- Stress Level: ${stressLevel}` : ''}
+- Plan Duration: ${planDays || 7} days
+- Estimated TDEE: ${tdee} calories
+- Target Daily Calories: ${targetCalories} calories
+${medicalHistory ? `- Medical Considerations: ${medicalHistory}` : ''}
+${stressLevel ? `- Current Stress Level: ${stressLevel}` : ''}
 
-Please respond with a JSON object containing:
-1. workoutPlan: 7-day detailed workout plan with daily exercises, sets, reps, rest times
-2. dietPlan: 7-day meal plan with breakfast, lunch, dinner, snacks, and macros
-3. tips: 5-7 lifestyle and fitness tips specific to their goals
-4. motivation: A personalized motivational message
+**REQUIREMENTS:**
+Generate a ${planDays || 7}-day plan with:
 
-Make the plan realistic, progressive, and tailored to their specific goals and constraints. Include proper warm-up, cool-down, and rest days. Calculate appropriate calories and macros based on their stats and goals.
+1. **workoutPlan** object with:
+   - title: Plan name
+   - duration: "${planDays || 7} days" 
+   - daysPerWeek: Appropriate frequency (3-6 based on level)
+   - workouts: Array of ${planDays || 7} daily workouts, each with:
+     * day: "Day 1", "Day 2", etc.
+     * focus: Muscle groups/type (e.g., "Upper Body", "HIIT", "Rest")
+     * warmup: Array of 3-4 warm-up activities
+     * exercises: Array of 4-8 exercises with name, sets, reps, restTime, instructions, muscleGroups, equipment
+     * cooldown: Array of 3-4 cool-down activities
+     * duration: Estimated workout time
 
-Respond only with valid JSON, no additional text.`;
+2. **dietPlan** object with:
+   - title: Nutrition plan name
+   - duration: "${planDays || 7} days"
+   - dailyCalories: ${targetCalories} (adjusted for ${fitnessGoal.replace('_', ' ')})
+   - macroSplit: {protein: %, carbs: %, fats: %} optimized for ${fitnessGoal.replace('_', ' ')}
+   - meals: Array of ${planDays || 7} daily meal plans with:
+     * day: "Day 1", "Day 2", etc.
+     * totalCalories, totalProtein, totalCarbs, totalFats
+     * breakfast, lunch, dinner: Each with name, ingredients[], calories, protein, carbs, fats, instructions
+     * snacks: Array of 1-2 snacks with same structure
+
+3. **tips**: Array of 6-8 personalized tips considering their ${fitnessLevel} level, ${fitnessGoal.replace('_', ' ')} goal, and ${workoutLocation} preference
+
+4. **motivation**: Inspiring message addressing ${name} personally, referencing their ${fitnessGoal.replace('_', ' ')} goal and ${planDays || 7}-day commitment
+
+**PERSONALIZATION GUIDELINES:**
+- ${fitnessLevel === 'beginner' ? 'Focus on form, basic movements, lighter intensity, more rest days' : 
+    fitnessLevel === 'intermediate' ? 'Moderate intensity, compound movements, balanced split' : 
+    'High intensity, advanced techniques, minimal rest days'}
+- ${fitnessGoal === 'weight_loss' ? 'Higher cardio, moderate strength training, caloric deficit' :
+    fitnessGoal === 'muscle_gain' ? 'Heavy strength training, progressive overload, caloric surplus' :
+    fitnessGoal === 'strength' ? 'Lower rep ranges, compound movements, strength focus' :
+    'Balanced approach with varied training styles'}
+- ${workoutLocation === 'home' ? 'Bodyweight and minimal equipment exercises' :
+    workoutLocation === 'gym' ? 'Full range of gym equipment' :
+    'Outdoor/functional fitness activities'}
+- ${dietaryPreference !== 'non_vegetarian' ? `Ensure ${dietaryPreference} compliance with adequate protein sources` : 'Include diverse protein sources'}
+
+**CRITICAL:** Respond with ONLY valid JSON. No explanations, no markdown, no additional text. The JSON must be properly formatted and complete.
+
+JSON:`;
 };
 
 const generateWithOpenAI = async (prompt: string): Promise<AIResponse> => {
@@ -88,33 +149,49 @@ const generateWithOpenAI = async (prompt: string): Promise<AIResponse> => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4',
+      model: 'gpt-4o',  // Using latest model
       messages: [
         {
           role: 'system',
-          content: 'You are an expert fitness coach and nutritionist. Generate comprehensive, personalized fitness and diet plans in valid JSON format only.'
+          content: 'You are a certified fitness coach and registered dietitian with 10+ years of experience. You specialize in creating personalized, science-based fitness and nutrition plans. Always respond with perfectly formatted JSON only.'
         },
         {
           role: 'user',
           content: prompt
         }
       ],
-      temperature: 0.7,
-      max_tokens: 4000,
+      temperature: 0.6,  // Slightly lower for more consistent results
+      max_tokens: 6000,   // Increased for comprehensive plans
+      response_format: { type: "json_object" }  // Force JSON format
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI API error: ${response.statusText}`);
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
   }
 
   const data = await response.json();
   const content = data.choices[0]?.message?.content;
   
+  if (!content) {
+    throw new Error('Empty response from OpenAI');
+  }
+
   try {
-    return JSON.parse(content);
-  } catch {
-    throw new Error('Invalid JSON response from OpenAI');
+    // Clean up the response in case there are extra characters
+    const cleanContent = content.replace(/```json|```/g, '').trim();
+    const parsedData = JSON.parse(cleanContent);
+    
+    // Validate required fields
+    if (!parsedData.workoutPlan || !parsedData.dietPlan || !parsedData.tips || !parsedData.motivation) {
+      throw new Error('Missing required fields in AI response');
+    }
+    
+    return parsedData;
+  } catch (error) {
+    console.error('Failed to parse OpenAI response:', content);
+    throw new Error('Invalid JSON response from OpenAI: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }
 };
 
@@ -129,29 +206,58 @@ const generateWithGemini = async (prompt: string): Promise<AIResponse> => {
         {
           parts: [
             {
-              text: `You are an expert fitness coach and nutritionist. Generate comprehensive, personalized fitness and diet plans in valid JSON format only.\n\n${prompt}`
+              text: prompt
             }
           ]
         }
       ],
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 4000,
-      }
+        temperature: 0.6,
+        maxOutputTokens: 6000,
+        topK: 40,
+        topP: 0.95,
+      },
+      safetySettings: [
+        {
+          category: "HARM_CATEGORY_HARASSMENT",
+          threshold: "BLOCK_MEDIUM_AND_ABOVE"
+        }
+      ]
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.statusText}`);
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
   }
 
   const data = await response.json();
   const content = data.candidates[0]?.content?.parts[0]?.text;
   
+  if (!content) {
+    throw new Error('Empty response from Gemini');
+  }
+  
   try {
-    return JSON.parse(content);
+    // Clean and parse the response
+    let cleanContent = content.replace(/```json|```/g, '').trim();
+    
+    // Handle potential markdown formatting
+    if (cleanContent.startsWith('```') && cleanContent.endsWith('```')) {
+      cleanContent = cleanContent.slice(3, -3).trim();
+    }
+    
+    const parsedData = JSON.parse(cleanContent);
+    
+    // Validate required fields
+    if (!parsedData.workoutPlan || !parsedData.dietPlan || !parsedData.tips || !parsedData.motivation) {
+      throw new Error('Missing required fields in AI response');
+    }
+    
+    return parsedData;
   } catch (error) {
-    throw new Error('Invalid JSON response from Gemini');
+    console.error('Failed to parse Gemini response:', content);
+    throw new Error('Invalid JSON response from Gemini: ' + (error instanceof Error ? error.message : 'Unknown error'));
   }
 };
 
@@ -180,29 +286,61 @@ export const generateSpeech = async (text: string): Promise<{ type: 'audio' | 'b
         const audioBlob = await response.blob();
         return { type: 'audio', blob: audioBlob };
       }
-    } catch (error) {
+    } catch {
       console.warn('ElevenLabs TTS failed, using browser fallback');
     }
   }
 
-  // Fallback to browser's speech synthesis
+  // Fallback to browser's speech synthesis with mobile support
   return new Promise((resolve, reject) => {
     if (!('speechSynthesis' in window)) {
       reject(new Error('Speech synthesis not supported in this browser'));
       return;
     }
 
+    // Check if browser actually supports speech (mobile safari often returns false)
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    // iOS Safari often blocks speech synthesis
+    if (isIOS && !window.speechSynthesis.speaking && window.speechSynthesis.pending === false) {
+      // Try to detect if iOS TTS is actually available
+      const testUtterance = new SpeechSynthesisUtterance('');
+      try {
+        speechSynthesis.speak(testUtterance);
+        speechSynthesis.cancel();
+      } catch (e) {
+        reject(new Error('Speech synthesis not available on this iOS device'));
+        return;
+      }
+    }
+
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.9;
+    utterance.rate = 0.8; // Slower rate for better mobile compatibility
     utterance.pitch = 1;
     utterance.volume = 1;
     
-    // Find a good voice
-    const voices = speechSynthesis.getVoices();
-    const englishVoice = voices.find(voice => voice.lang.startsWith('en')) || voices[0];
-    if (englishVoice) {
-      utterance.voice = englishVoice;
-    }
+    // Function to set voice with mobile compatibility
+    const setVoice = () => {
+      const voices = speechSynthesis.getVoices();
+      if (voices.length === 0) {
+        // On mobile, voices might not be loaded yet
+        if (isMobile) {
+          // Use default voice on mobile
+          utterance.voice = null;
+          return;
+        }
+      }
+      
+      // Find best English voice
+      const englishVoice = voices.find(voice => 
+        voice.lang.startsWith('en') && !voice.name.includes('Google')
+      ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0];
+      
+      if (englishVoice) {
+        utterance.voice = englishVoice;
+      }
+    };
 
     utterance.onend = () => {
       resolve({ type: 'browser-tts' });
@@ -212,8 +350,33 @@ export const generateSpeech = async (text: string): Promise<{ type: 'audio' | 'b
       reject(new Error('Speech synthesis failed: ' + error.error));
     };
 
-    // Start speaking
-    speechSynthesis.speak(utterance);
+    // Add timeout for mobile devices
+    const timeout = setTimeout(() => {
+      speechSynthesis.cancel();
+      reject(new Error('Speech synthesis timeout on mobile device'));
+    }, 30000); // 30 second timeout
+
+    utterance.onend = () => {
+      clearTimeout(timeout);
+      resolve({ type: 'browser-tts' });
+    };
+
+    // Start speaking with mobile-specific handling
+    try {
+      speechSynthesis.speak(utterance);
+      
+      // Mobile Chrome sometimes needs a small delay
+      if (isMobile && !isIOS) {
+        setTimeout(() => {
+          if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+            speechSynthesis.speak(utterance);
+          }
+        }, 100);
+      }
+    } catch (error) {
+      clearTimeout(timeout);
+      reject(new Error('Failed to start speech synthesis'));
+    }
   });
 };
 
@@ -307,7 +470,6 @@ export const generateImage = async (prompt: string): Promise<string> => {
     };
     
     const searchTerm = getSearchTerms(prompt);
-    
     // Comprehensive exercise-specific images
     const exerciseImages = {
       'push-ups': 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop&crop=center&q=80',
@@ -395,23 +557,20 @@ export const generateImage = async (prompt: string): Promise<string> => {
     // If not clearly categorized, try both but prioritize exact matches
     for (const [key, url] of Object.entries(exerciseImages)) {
       if (promptLower.includes(key)) {
-        console.log('🏋️ Found exercise match for:', key);
         return url;
       }
     }
     
     for (const [key, url] of Object.entries(foodImages)) {
       if (promptLower.includes(key)) {
-        console.log('🍎 Found food match for:', key);
         return url;
       }
     }
     
-    console.log('❓ No specific match found, using generic fitness image');
+    // No specific match found, using generic fitness image
     // Generic fitness fallback
     return 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop&crop=center&q=80';
-  } catch (error) {
-    console.warn('❌ Direct search failed:', error);
+  } catch {
     // Return a fallback image URL
     return 'https://source.unsplash.com/400x300/?fitness';
   }
@@ -456,8 +615,8 @@ export const generateMotivationQuote = async (): Promise<string> => {
   }
 };
 
-// Demo response function for when no API keys are available
-const generateDemoResponse = (userDetails: UserDetails): AIResponse => {
+// Enhanced demo response function with better personalization
+const generateEnhancedDemoResponse = (userDetails: UserDetails): AIResponse => {
   // Generate multiple workout days based on user input
   const generateWorkouts = () => {
     const workoutTemplates = [

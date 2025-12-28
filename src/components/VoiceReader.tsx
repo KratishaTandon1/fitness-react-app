@@ -14,6 +14,7 @@ const VoiceReader: React.FC<VoiceReaderProps> = ({ plan }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
   const [selectedSection, setSelectedSection] = useState<'workout' | 'diet' | 'tips'>('workout');
+  const [isStopped, setIsStopped] = useState(false);
 
   const generatePlanText = (section: 'workout' | 'diet' | 'tips'): string => {
     switch (section) {
@@ -44,23 +45,33 @@ const VoiceReader: React.FC<VoiceReaderProps> = ({ plan }) => {
     }
   };
 
-  const handlePlayPause = async () => {
-    if (isPlaying) {
-      // Stop current playback
+  const handlePlayStop = async () => {
+    if (isPlaying || isLoading) {
+      // Stop current playback or cancel loading
+      setIsStopped(true);
       if (currentAudio) {
         currentAudio.pause();
+        currentAudio.currentTime = 0;
+        setCurrentAudio(null);
       } else {
         // If using browser TTS, stop it
         speechSynthesis.cancel();
       }
       setIsPlaying(false);
+      setIsLoading(false);
       return;
     }
 
+    setIsStopped(false);
     setIsLoading(true);
     try {
       const text = generatePlanText(selectedSection);
       const speechResult = await generateSpeech(text);
+      
+      // Check if user stopped during loading
+      if (isStopped) {
+        return;
+      }
       
       if (speechResult.type === 'audio' && speechResult.blob) {
         // ElevenLabs audio blob - play as usual
@@ -93,21 +104,28 @@ const VoiceReader: React.FC<VoiceReaderProps> = ({ plan }) => {
         }, 100);
       }
     } catch (error) {
-      console.error('Error generating speech:', error);
-      alert('Voice feature is not available. Your browser may not support speech synthesis.');
+      // Only show error if user didn't manually stop
+      if (!isStopped) {
+        console.error('Error generating speech:', error);
+        // Use a more user-friendly message
+        console.log('Voice feature temporarily unavailable');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleStop = () => {
+  const stopCurrentAudio = () => {
+    setIsStopped(true);
     if (currentAudio) {
       currentAudio.pause();
       currentAudio.currentTime = 0;
+      setCurrentAudio(null);
     } else {
       speechSynthesis.cancel();
     }
     setIsPlaying(false);
+    setIsLoading(false);
   };
 
   return (
@@ -132,8 +150,8 @@ const VoiceReader: React.FC<VoiceReaderProps> = ({ plan }) => {
                 variant={selectedSection === section.id ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => {
+                  stopCurrentAudio();
                   setSelectedSection(section.id as any);
-                  handleStop();
                 }}
               >
                 {section.label}
@@ -142,36 +160,36 @@ const VoiceReader: React.FC<VoiceReaderProps> = ({ plan }) => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center justify-center">
           <Button
-            onClick={handlePlayPause}
-            disabled={isLoading}
+            onClick={handlePlayStop}
             className="flex items-center space-x-2"
+            size="lg"
           >
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <>
+                <VolumeX className="h-4 w-4" />
+                <span>Stop</span>
+              </>
             ) : isPlaying ? (
-              <Pause className="h-4 w-4" />
+              <>
+                <VolumeX className="h-4 w-4" />
+                <span>Stop</span>
+              </>
             ) : (
-              <Play className="h-4 w-4" />
+              <>
+                <Play className="h-4 w-4" />
+                <span>Play</span>
+              </>
             )}
-            <span>{isLoading ? 'Loading...' : isPlaying ? 'Pause' : 'Play'}</span>
           </Button>
-          
-          {currentAudio && (
-            <Button
-              variant="outline"
-              onClick={handleStop}
-              className="flex items-center space-x-2"
-            >
-              <VolumeX className="h-4 w-4" />
-              <span>Stop</span>
-            </Button>
-          )}
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Voice feature powered by ElevenLabs TTS
+          {window.speechSynthesis ? 
+            'Voice feature powered by ElevenLabs TTS' : 
+            'Voice feature requires a supported browser'
+          }
         </p>
       </CardContent>
     </Card>

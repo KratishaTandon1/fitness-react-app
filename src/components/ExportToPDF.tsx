@@ -29,128 +29,153 @@ const ExportToPDF: React.FC<ExportToPDFProps> = ({ plan }) => {
       // User details
       pdf.setFontSize(16);
       pdf.setTextColor(0, 0, 0);
-      pdf.text(`Plan for: ${plan.userDetails.name}`, margin, currentY);
+      pdf.text(`Plan for: ${plan.userDetails?.name || 'User'}`, margin, currentY);
       currentY += 8;
       
       pdf.setFontSize(12);
-      pdf.text(`Goal: ${plan.userDetails.fitnessGoal.replace('_', ' ')}`, margin, currentY);
+      pdf.text(`Goal: ${plan.userDetails?.fitnessGoal?.replace('_', ' ') || 'General Fitness'}`, margin, currentY);
       currentY += 6;
-      pdf.text(`Level: ${plan.userDetails.fitnessLevel}`, margin, currentY);
+      pdf.text(`Level: ${plan.userDetails?.fitnessLevel || 'beginner'}`, margin, currentY);
       currentY += 6;
-      pdf.text(`Created: ${plan.createdAt.toLocaleDateString()}`, margin, currentY);
+      
+      // Handle createdAt safely
+      const createdDate = plan.createdAt instanceof Date ? 
+        plan.createdAt.toLocaleDateString() : 
+        new Date().toLocaleDateString();
+      pdf.text(`Created: ${createdDate}`, margin, currentY);
       currentY += 15;
 
       // Workout Plan Section
-      pdf.setFontSize(18);
-      pdf.setTextColor(103, 126, 234);
-      pdf.text('Workout Plan', margin, currentY);
-      currentY += 10;
+      if (plan.workoutPlan && plan.workoutPlan.workouts && plan.workoutPlan.workouts.length > 0) {
+        pdf.setFontSize(18);
+        pdf.setTextColor(103, 126, 234);
+        pdf.text('Workout Plan', margin, currentY);
+        currentY += 10;
 
-      pdf.setFontSize(12);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text(`Duration: ${plan.workoutPlan.duration}`, margin, currentY);
-      currentY += 6;
-      pdf.text(`Days per week: ${plan.workoutPlan.daysPerWeek}`, margin, currentY);
-      currentY += 10;
+        pdf.setFontSize(12);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`Duration: ${plan.workoutPlan.duration || 'Not specified'}`, margin, currentY);
+        currentY += 6;
+        pdf.text(`Days per week: ${plan.workoutPlan.daysPerWeek || 'Not specified'}`, margin, currentY);
+        currentY += 10;
 
-      // Workout days
-      for (const dayWorkout of plan.workoutPlan.workouts) {
-        if (currentY > pageHeight - 40) {
+        // Workout days
+        for (const dayWorkout of plan.workoutPlan.workouts) {
+          if (currentY > pageHeight - 40) {
+            pdf.addPage();
+            currentY = margin;
+          }
+
+          pdf.setFontSize(14);
+          pdf.setTextColor(103, 126, 234);
+          pdf.text(`${dayWorkout.day || 'Day'} - ${dayWorkout.focus || 'Workout'}`, margin, currentY);
+          currentY += 8;
+
+          pdf.setFontSize(10);
+          pdf.setTextColor(0, 0, 0);
+          
+          const exercises = dayWorkout.exercises || [];
+          for (const exercise of exercises.slice(0, 8)) { // Limit exercises to fit
+            if (currentY > pageHeight - 20) {
+              pdf.addPage();
+              currentY = margin;
+            }
+            
+            const exerciseText = `• ${exercise.name || 'Exercise'}: ${exercise.sets || 1} sets x ${exercise.reps || '10'}, Rest: ${exercise.restTime || '30s'}`;
+            pdf.text(exerciseText, margin + 5, currentY);
+            currentY += 5;
+          }
+          currentY += 5;
+        }
+      }
+
+      // Diet Plan Section
+      if (plan.dietPlan && plan.dietPlan.meals && plan.dietPlan.meals.length > 0) {
+        if (currentY > pageHeight - 60) {
           pdf.addPage();
           currentY = margin;
         }
 
-        pdf.setFontSize(14);
+        pdf.setFontSize(18);
         pdf.setTextColor(103, 126, 234);
-        pdf.text(`${dayWorkout.day} - ${dayWorkout.focus}`, margin, currentY);
-        currentY += 8;
+        pdf.text('Diet Plan', margin, currentY);
+        currentY += 10;
 
-        pdf.setFontSize(10);
+        pdf.setFontSize(12);
+        pdf.setTextColor(0, 0, 0);
+        pdf.text(`Daily Calories: ${plan.dietPlan.dailyCalories || 'Not specified'}`, margin, currentY);
+        currentY += 6;
+        
+        if (plan.dietPlan.macroSplit) {
+          pdf.text(`Protein: ${plan.dietPlan.macroSplit.protein || 0}% | Carbs: ${plan.dietPlan.macroSplit.carbs || 0}% | Fats: ${plan.dietPlan.macroSplit.fats || 0}%`, margin, currentY);
+        }
+        currentY += 10;
+
+        // Diet days
+        for (const dayMeals of plan.dietPlan.meals.slice(0, 7)) {
+          if (currentY > pageHeight - 30) {
+            pdf.addPage();
+            currentY = margin;
+          }
+
+          pdf.setFontSize(14);
+          pdf.setTextColor(103, 126, 234);
+          pdf.text(`${dayMeals.day || 'Day'}`, margin, currentY);
+          currentY += 8;
+
+          pdf.setFontSize(10);
+          pdf.setTextColor(0, 0, 0);
+          
+          if (dayMeals.breakfast) {
+            pdf.text(`• Breakfast: ${dayMeals.breakfast.name || 'Meal'} (${dayMeals.breakfast.calories || 0} cal)`, margin + 5, currentY);
+            currentY += 5;
+          }
+          if (dayMeals.lunch) {
+            pdf.text(`• Lunch: ${dayMeals.lunch.name || 'Meal'} (${dayMeals.lunch.calories || 0} cal)`, margin + 5, currentY);
+            currentY += 5;
+          }
+          if (dayMeals.dinner) {
+            pdf.text(`• Dinner: ${dayMeals.dinner.name || 'Meal'} (${dayMeals.dinner.calories || 0} cal)`, margin + 5, currentY);
+            currentY += 5;
+          }
+          currentY += 3;
+        }
+      }
+
+      // Tips Section
+      if (plan.tips && plan.tips.length > 0) {
+        if (currentY > pageHeight - 60) {
+          pdf.addPage();
+          currentY = margin;
+        }
+
+        pdf.setFontSize(18);
+        pdf.setTextColor(103, 126, 234);
+        pdf.text('Personal Tips & Motivation', margin, currentY);
+        currentY += 10;
+
+        pdf.setFontSize(12);
         pdf.setTextColor(0, 0, 0);
         
-        for (const exercise of dayWorkout.exercises.slice(0, 8)) { // Limit exercises to fit
+        // Motivation
+        if (plan.motivation) {
+          const motivationLines = pdf.splitTextToSize(`"${plan.motivation}"`, pageWidth - 2 * margin);
+          pdf.text(motivationLines, margin, currentY);
+          currentY += motivationLines.length * 6 + 10;
+        }
+
+        // Tips
+        pdf.setFontSize(12);
+        for (let i = 0; i < plan.tips.length && i < 5; i++) {
           if (currentY > pageHeight - 20) {
             pdf.addPage();
             currentY = margin;
           }
           
-          const exerciseText = `• ${exercise.name}: ${exercise.sets} sets x ${exercise.reps}, Rest: ${exercise.restTime}`;
-          pdf.text(exerciseText, margin + 5, currentY);
-          currentY += 5;
+          const tipLines = pdf.splitTextToSize(`${i + 1}. ${plan.tips[i]}`, pageWidth - 2 * margin - 10);
+          pdf.text(tipLines, margin + 5, currentY);
+          currentY += tipLines.length * 6 + 5;
         }
-        currentY += 5;
-      }
-
-      // Diet Plan Section
-      if (currentY > pageHeight - 60) {
-        pdf.addPage();
-        currentY = margin;
-      }
-
-      pdf.setFontSize(18);
-      pdf.setTextColor(103, 126, 234);
-      pdf.text('Diet Plan', margin, currentY);
-      currentY += 10;
-
-      pdf.setFontSize(12);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text(`Daily Calories: ${plan.dietPlan.dailyCalories}`, margin, currentY);
-      currentY += 6;
-      pdf.text(`Protein: ${plan.dietPlan.macroSplit.protein}% | Carbs: ${plan.dietPlan.macroSplit.carbs}% | Fats: ${plan.dietPlan.macroSplit.fats}%`, margin, currentY);
-      currentY += 10;
-
-      // Diet days
-      for (const dayMeals of plan.dietPlan.meals.slice(0, 7)) {
-        if (currentY > pageHeight - 30) {
-          pdf.addPage();
-          currentY = margin;
-        }
-
-        pdf.setFontSize(14);
-        pdf.setTextColor(103, 126, 234);
-        pdf.text(`${dayMeals.day}`, margin, currentY);
-        currentY += 8;
-
-        pdf.setFontSize(10);
-        pdf.setTextColor(0, 0, 0);
-        pdf.text(`• Breakfast: ${dayMeals.breakfast.name} (${dayMeals.breakfast.calories} cal)`, margin + 5, currentY);
-        currentY += 5;
-        pdf.text(`• Lunch: ${dayMeals.lunch.name} (${dayMeals.lunch.calories} cal)`, margin + 5, currentY);
-        currentY += 5;
-        pdf.text(`• Dinner: ${dayMeals.dinner.name} (${dayMeals.dinner.calories} cal)`, margin + 5, currentY);
-        currentY += 8;
-      }
-
-      // Tips Section
-      if (currentY > pageHeight - 60) {
-        pdf.addPage();
-        currentY = margin;
-      }
-
-      pdf.setFontSize(18);
-      pdf.setTextColor(103, 126, 234);
-      pdf.text('Personal Tips & Motivation', margin, currentY);
-      currentY += 10;
-
-      pdf.setFontSize(12);
-      pdf.setTextColor(0, 0, 0);
-      
-      // Motivation
-      const motivationLines = pdf.splitTextToSize(`"${plan.motivation}"`, pageWidth - 2 * margin);
-      pdf.text(motivationLines, margin, currentY);
-      currentY += motivationLines.length * 6 + 10;
-
-      // Tips
-      pdf.setFontSize(12);
-      for (let i = 0; i < plan.tips.length && i < 5; i++) {
-        if (currentY > pageHeight - 20) {
-          pdf.addPage();
-          currentY = margin;
-        }
-        
-        const tipLines = pdf.splitTextToSize(`${i + 1}. ${plan.tips[i]}`, pageWidth - 2 * margin - 10);
-        pdf.text(tipLines, margin + 5, currentY);
-        currentY += tipLines.length * 6 + 5;
       }
 
       // Footer
@@ -159,11 +184,22 @@ const ExportToPDF: React.FC<ExportToPDFProps> = ({ plan }) => {
       pdf.text('Generated by AI Fitness Coach', margin, pageHeight - 10);
 
       // Save the PDF
-      const fileName = `${plan.userDetails.name.replace(/\s+/g, '_')}_Fitness_Plan.pdf`;
+      const fileName = `${(plan.userDetails?.name || 'User').replace(/\s+/g, '_')}_Fitness_Plan.pdf`;
       pdf.save(fileName);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Error generating PDF. Please try again.');
+      
+      // Better error handling with more specific messages
+      let errorMessage = 'Error generating PDF. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('jsPDF')) {
+          errorMessage = 'PDF library error. Please refresh the page and try again.';
+        } else if (error.message.includes('Cannot read')) {
+          errorMessage = 'Plan data is incomplete. Please generate a new plan first.';
+        }
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsExporting(false);
     }

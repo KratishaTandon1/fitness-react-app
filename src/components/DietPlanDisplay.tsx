@@ -12,6 +12,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import type { DietPlan, Meal } from '../types';
 import { generateImage } from '../lib/api';
+import ImageModal from './ImageModal';
 
 interface DietPlanDisplayProps {
   dietPlan: DietPlan;
@@ -21,6 +22,7 @@ const DietPlanDisplay: React.FC<DietPlanDisplayProps> = ({ dietPlan }) => {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set([dietPlan.meals[0]?.day]));
   const [mealImages, setMealImages] = useState<Record<string, string>>({});
   const [loadingImages, setLoadingImages] = useState<Record<string, boolean>>({});
+  const [modalImage, setModalImage] = useState<{ src: string; alt: string } | null>(null);
 
   // Auto-generate images for all meals when component mounts
   useEffect(() => {
@@ -163,7 +165,8 @@ const DietPlanDisplay: React.FC<DietPlanDisplayProps> = ({ dietPlan }) => {
               <img
                 src={mealImages[imageKey]}
                 alt={meal.name}
-                className="w-20 h-20 object-cover rounded-md border"
+                className="w-20 h-20 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => setModalImage({ src: mealImages[imageKey], alt: meal.name })}
                 onError={(e) => {
                   // If image fails to load, hide it
                   const target = e.target as HTMLImageElement;
@@ -295,6 +298,16 @@ const DietPlanDisplay: React.FC<DietPlanDisplayProps> = ({ dietPlan }) => {
           </motion.div>
         ))}
       </div>
+
+      {/* Image Modal */}
+      {modalImage && (
+        <ImageModal
+          isOpen={true}
+          imageSrc={modalImage.src}
+          imageAlt={modalImage.alt}
+          onClose={() => setModalImage(null)}
+        />
+      )}
     </div>
   );
 };
